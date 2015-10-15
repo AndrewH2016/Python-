@@ -1,0 +1,181 @@
+# Created by Andrew Hales
+# This the programme where I combine my ideas and trials
+# Need to deal with the whole Dear, month etc, think best to pass this as arguments from VBA?
+# Need to sort out the issue of pound sign/euro depending on the column
+# Perhaps pass the column which my stuff should be written into as an argument???
+
+import openpyxl
+import string
+from sys import argv
+import os
+
+
+#Clear previous HTML file, exception handler in case file not there
+HTMLfilename = r'C:\Users\andrew\Desktop\Reports\InvestorReport.HTML'
+try:
+    os.remove(HTMLfilename)
+except:
+    pass
+
+#Sort out these arguments
+script, named_range = argv
+
+wb = openpyxl.load_workbook(r'C:\Users\andrew\Desktop\InvestorTest.xlsm')
+wksInvestors = wb.get_sheet_by_name('Investors')
+investor_list = [named_range]
+
+source_file = open(r'C:\Users\andrew\Desktop\Reports\source.txt','r')
+lines = source_file.readlines()
+source_file.close()
+
+# This function takes the named range address and splits it into a list of two cell references
+def split_address(x):
+    x = x.split(':')
+    return x
+
+
+# This function takes in the top left and bottom right cell references and then creates a list of the cells with the headers
+def create_header_cells(x):
+    firstcell = x[0]
+    lastcell = x[1]
+    firstcell_col = firstcell.split()
+    # Get the row
+    wks_row = firstcell_col[1]
+    # Now get the first column and the last
+    firstcell_col = firstcell_col[0]
+    lastcell_col = lastcell.split()
+    lastcell_col = lastcell_col[0]
+
+    # Now fill in the missing columns
+    col_list = [firstcell_col, lastcell_col]
+    header_cells = []
+    header_cells = fill_missing_letters(col_list, wks_row)
+    return (header_cells)
+
+
+# This function returns a list of the missing columns
+def fill_missing_letters(column_list, wks_row):
+    alphabet = list(string.ascii_uppercase)
+    temp_col_list = [column_list[0]]
+    for idx, letter in enumerate(alphabet):
+        if letter == column_list[0]:
+            counter = idx + 1
+            while alphabet[counter] != column_list[1]:
+                letter = alphabet[counter]
+                temp_col_list.append(letter)
+                counter = counter + 1
+    temp_col_list.append(column_list[1])
+
+    for i in range(len(temp_col_list)):
+        temp_col_list[i] = temp_col_list[i] + wks_row
+
+    return temp_col_list
+
+
+# This function returns a list of the missing rows
+def fill_missing_rows(row_list):
+    """#Again need to adjust if there is only one row"""
+    firstNum, secondNum = int(row_list[0]), int(row_list[1])
+    x = secondNum - firstNum
+    if x == 1:
+        temp_row_list = row_list[1]
+    else:
+        #firstNum, secondNum = int(row_list[0]), int(row_list[1])
+        #+1 to avoid the headers that use a different format
+        firstNum += 1
+        counter = firstNum + 1
+        temp_row_list = [firstNum]
+        counter += 1
+        while counter < secondNum:
+            counter += 1
+            temp_row_list.append(counter)
+        temp_row_list.append(secondNum)
+    return temp_row_list
+
+
+# This function adds the HTML string for the headers of the table to the master string
+# It returns the master string with added code
+def add_header_HTML(header_cells, masterStr):
+    header_HTML = '<tr style="border-bottom: 1px solid #fff; color: #fff; font-size: 0.8em;">'
+    masterStr = masterStr + header_HTML
+    for i in range(len(header_cells)):
+        cellRef = (header_cells[i])
+        cellValue = getValue(wksInvestors, cellRef)
+        temp_string = ('<td><strong>%s</strong></td>') % cellValue
+        masterStr = masterStr + temp_string
+    return masterStr
+
+def add_row_HTML(row_cells, masterStr):
+    row_HTML = '<tr style="border-bottom: 1px solid #fff; color: #fff; font-size: 0.8em;">'
+    masterStr = masterStr + row_HTML
+    for i in range(len(row_cells)):
+        cellRef = (row_cells[i])
+        cellValue = getValue(wksInvestors, cellRef)
+        temp_string = ('<td>%s</td>') % cellValue
+        masterStr = masterStr + temp_string
+    return masterStr
+
+# Retrieve the cell value from the spreadsheet
+def getValue(wks, cell):
+    cellValue = wks[cell].value
+    return cellValue
+
+
+# Return a list with the various rows
+def create_row_HTML(x, masterStr):
+    firstRow = x[0]
+    lastRow = x[1]
+    firstRow = firstRow.split()
+    """#Need to add +1 to the firstRow to remove the headers (which are formatted
+    seperately due to being bold"""
+    firstRow, firstCol = firstRow[1], firstRow[0]
+    #firstRow = int(firstRow) + 1
+    lastRow = lastRow.split()
+    lastRow, lastCol = lastRow[1], lastRow[0]
+    if firstRow == lastRow:
+        rowList = [lastRow]
+    else:
+        rowList = [firstRow, lastRow]
+    colList = [firstCol, lastCol]
+    rowList = fill_missing_rows(rowList)
+    for i in range(len(rowList)):
+        wksRow = str(rowList[i])
+        temp_list = fill_missing_letters(colList, wksRow)
+        masterStr = (add_row_HTML(temp_list,masterStr))
+    return masterStr
+
+#Adds closing table value
+def add_table_close(masterStr):
+    masterStr = masterStr + '</tr>'
+    return masterStr
+
+
+for idx, investor in enumerate(investor_list):
+    #Need to deal with this i.e. adding the dear etc etc
+    master_string = '<p>&nbsp;</p><table style="background-color: #9f261d; width: 100%;" cellpadding="10">'
+    rng = wb.get_named_range(investor).destinations[0]
+    address = rng[1].replace('$', ' ')
+    address = split_address(address)
+    header_cells = create_header_cells(address)
+    master_string = (add_header_HTML(header_cells, master_string))
+    master_string = add_table_close(master_string)
+    master_string = create_row_HTML(address, master_string)
+    master_string = add_table_close(master_string)
+    #Now add the closing table HTMl
+    master_string = master_string + ('</table>')
+
+    new_file = open(r'C:\Users\andrew\Desktop\Reports\InvestorReport.txt','w+')
+    exp = 86
+
+    with new_file:
+        for i, line in enumerate(lines):
+                if i == exp:
+                        new_file.write(master_string)
+                new_file.write(line)
+    new_file.close()
+
+filename = r'C:\Users\andrew\Desktop\Reports\InvestorReport.txt'
+os.rename(filename, filename[:-4] + '.html')
+
+
+
